@@ -6,27 +6,83 @@
 // auth, so once switched they send each table call to /api/admin/db, which replays it with the
 // service client. This module is dependency-free so node --test can load it directly.
 
-// Exactly the tables the coordinator screens call (census in tests/itp-move.test.mjs).
-// showcase_players has its own admin routes; scouts and every non-showcase table stay out.
-export const SHOWCASE_DB_TABLES = [
-  'showcase_activity',
-  'showcase_announcements',
-  'showcase_attendees',
-  'showcase_categories',
-  'showcase_comments',
-  'showcase_day_activities',
-  'showcase_day_groups',
-  'showcase_event_scouts',
-  'showcase_events',
-  'showcase_feedback',
-  'showcase_matches',
-  'showcase_materials',
-  'showcase_milestones',
-  'showcase_tasks',
-  'showcase_venue_zones',
-] as const
-
 export const DB_ACTIONS = ['select', 'insert', 'update', 'delete'] as const
+
+// Exactly the tables the coordinator screens call, and only what they do with each (census in
+// tests/itp-move.test.mjs): categories are read-only, the activity log is append-only, and so on.
+// showcase_players has its own admin routes; scouts and every non-showcase table stay out.
+export const TABLE_ACTIONS: Record<string, readonly Action[]> = {
+  showcase_activity: ['insert'],
+  showcase_announcements: ['select', 'insert', 'update', 'delete'],
+  showcase_attendees: ['select', 'insert', 'update', 'delete'],
+  showcase_categories: ['select'],
+  showcase_comments: ['select', 'insert'],
+  showcase_day_activities: ['select', 'insert', 'update', 'delete'],
+  showcase_day_groups: ['select', 'insert', 'delete'],
+  showcase_event_scouts: ['select', 'insert', 'update', 'delete'],
+  showcase_events: ['select', 'insert', 'update', 'delete'],
+  showcase_feedback: ['select', 'insert', 'update'],
+  showcase_matches: ['select', 'insert', 'update', 'delete'],
+  showcase_materials: ['select', 'insert'],
+  showcase_milestones: ['select', 'update'],
+  showcase_tasks: ['select', 'insert', 'update', 'delete'],
+  showcase_venue_zones: ['select', 'insert', 'update', 'delete'],
+}
+export const SHOWCASE_DB_TABLES = Object.keys(TABLE_ACTIONS)
+
+// Exactly the columns the screens write with each insert and update (census in
+// tests/itp-move.test.mjs). Any other column is refused, so e.g. ticking a milestone cannot also
+// move it to another event, and reviewing feedback cannot rewrite what was submitted.
+export const WRITE_COLUMNS: Record<string, { insert?: readonly string[]; update?: readonly string[] }> = {
+  showcase_activity: { insert: ['event_id', 'entity_type', 'entity_id', 'action', 'actor', 'details'] },
+  showcase_announcements: { insert: ['event_id', 'title', 'content', 'pinned', 'author'], update: ['pinned'] },
+  showcase_attendees: {
+    insert: ['event_id', 'name', 'email', 'roles', 'phone', 'notes', 'availability', 'created_by'],
+    update: ['name', 'email', 'roles', 'phone', 'notes', 'availability', 'updated_at'],
+  },
+  showcase_comments: { insert: ['event_id', 'task_id', 'author', 'content'] },
+  showcase_day_activities: {
+    insert: ['event_id', 'event_date', 'group_id', 'start_time', 'end_time', 'activity', 'responsible', 'todos', 'notes',
+      'sort_order', 'created_by'],
+    update: ['group_id', 'start_time', 'end_time', 'activity', 'responsible', 'notes', 'updated_at'],
+  },
+  showcase_day_groups: { insert: ['event_id', 'name', 'color', 'sort_order'] },
+  showcase_event_scouts: {
+    insert: ['event_id', 'name', 'organization', 'logo_url', 'sort_order'],
+    update: ['name', 'organization', 'logo_url', 'updated_at'],
+  },
+  showcase_events: {
+    insert: ['name', 'slug', 'location', 'start_date', 'end_date', 'start_time', 'end_time', 'type', 'description',
+      'venue_lat', 'venue_lng', 'price', 'currency', 'age_min', 'age_max', 'registration_open', 'registration_details'],
+    update: ['name', 'location', 'start_date', 'end_date', 'start_time', 'end_time', 'description', 'registration_open',
+      'price', 'currency', 'age_min', 'age_max', 'max_players', 'registration_deadline', 'accent_color',
+      'registration_details', 'venue_lat', 'venue_lng', 'venue_zoom', 'updated_at'],
+  },
+  showcase_feedback: {
+    insert: ['event_id', 'type', 'description', 'details', 'importance', 'page_url', 'screenshot_url', 'ai_prompt',
+      'submitted_by'],
+    update: ['status', 'reviewed_at', 'reviewed_by'],
+  },
+  showcase_matches: {
+    insert: ['event_id', 'event_date', 'match_number', 'start_time', 'team_a', 'team_b', 'field', 'referee', 'notes',
+      'score_a', 'score_b', 'created_by'],
+    update: ['match_number', 'start_time', 'team_a', 'team_b', 'field', 'referee', 'notes', 'updated_at'],
+  },
+  showcase_materials: { insert: ['event_id', 'item', 'category', 'responsible', 'notes', 'sort_order', 'is_ready'] },
+  showcase_milestones: { update: ['completed'] },
+  showcase_tasks: {
+    insert: ['event_id', 'title', 'description', 'category_id', 'priority', 'assignee', 'deadline', 'scheduled_date',
+      'scheduled_time', 'show_on_schedule', 'dependencies', 'status', 'progress', 'created_by'],
+    update: ['title', 'description', 'category_id', 'priority', 'assignee', 'deadline', 'scheduled_date',
+      'scheduled_time', 'show_on_schedule', 'status', 'updated_at', 'updated_by'],
+  },
+  showcase_venue_zones: {
+    insert: ['event_id', 'name', 'description', 'color', 'x', 'y', 'width', 'height', 'rotation', 'zone_type',
+      'sort_order', 'created_by'],
+    update: ['name', 'description', 'color', 'x', 'y', 'width', 'height', 'rotation', 'zone_type', 'updated_at'],
+  },
+}
+
 export const DB_FILTERS = ['eq', 'contains', 'ilike'] as const
 export const MAX_ROWS = 1000
 
@@ -87,13 +143,19 @@ const isPlainRow = (v: unknown): v is Row =>
 const isScalar = (v: unknown) =>
   typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))
 
+function checkWritable(table: string, action: 'insert' | 'update', row: Row) {
+  const allowed = WRITE_COLUMNS[table][action] ?? []
+  const column = Object.keys(row).find((k) => !allowed.includes(k))
+  if (column !== undefined) throw new DbRequestError(`column not writable on ${table}: ${column.slice(0, 60)}`)
+}
+
 function checkColumns(columns: unknown): string {
   if (typeof columns !== 'string' || columns.length > 500) throw new DbRequestError('columns must be a short string')
   for (const raw of columns.split(',')) {
     const part = raw.trim()
     const embedded = part.match(EMBED)
     if (part === '*' || IDENT.test(part)) continue
-    if (embedded && isTable(embedded[1])) continue
+    if (embedded && isTable(embedded[1]) && TABLE_ACTIONS[embedded[1]].includes('select')) continue
     throw new DbRequestError(`column not allowed: ${part.slice(0, 60)}`)
   }
   return columns
@@ -107,6 +169,7 @@ export function parseDbRequest(body: unknown): DbRequest {
   if (!isTable(b.table)) throw new DbRequestError('table not allowed')
   if (!(DB_ACTIONS as readonly unknown[]).includes(b.action)) throw new DbRequestError('action not allowed')
   const action = b.action as Action
+  if (!TABLE_ACTIONS[b.table].includes(action)) throw new DbRequestError(`${action} not allowed on ${b.table}`)
 
   const filters = b.filters ?? []
   if (!Array.isArray(filters) || filters.length > 10) throw new DbRequestError('filters must be a short list')
@@ -141,9 +204,12 @@ export function parseDbRequest(body: unknown): DbRequest {
     if (rows.length === 0 || rows.length > MAX_ROWS || !rows.every(isPlainRow)) {
       throw new DbRequestError('insert needs 1 to 1000 rows')
     }
+    for (const row of rows) checkWritable(b.table, 'insert', row)
     values = b.values as Row | Row[]
   } else if (action === 'update') {
     if (!isPlainRow(b.values) || Object.keys(b.values).length === 0) throw new DbRequestError('update needs values')
+    // No update list holds id, so a change can never rewrite which row it is.
+    checkWritable(b.table, 'update', b.values)
     values = b.values
   } else if (b.values !== undefined && b.values !== null) {
     throw new DbRequestError(`${action} takes no values`)
@@ -152,9 +218,14 @@ export function parseDbRequest(body: unknown): DbRequest {
   if (action === 'select' && columns === null) throw new DbRequestError('select needs columns')
   if (action === 'insert' && parsedFilters.length > 0) throw new DbRequestError('insert takes no filters')
   if (action !== 'select' && parsedOrder.length > 0) throw new DbRequestError('order is for select only')
-  // A change always names its rows: no whole-table update or delete.
-  if ((action === 'update' || action === 'delete') && !parsedFilters.some((f) => f.op === 'eq')) {
-    throw new DbRequestError(`${action} needs an eq filter`)
+  // A change names its one row by id. The only exception is event cloning, which clears the target
+  // event's day groups (create-event-dialog.tsx) before copying the source event's groups.
+  if (action === 'update' || action === 'delete') {
+    const byId = parsedFilters.some((f) => f.op === 'eq' && f.column === 'id' && typeof f.value === 'string' && f.value !== '')
+    const cloneClear = b.table === 'showcase_day_groups' && action === 'delete' && parsedFilters.length === 1 &&
+      parsedFilters[0].op === 'eq' && parsedFilters[0].column === 'event_id' && typeof parsedFilters[0].value === 'string' &&
+      parsedFilters[0].value !== ''
+    if (!byId && !cloneClear) throw new DbRequestError(`${action} needs an id`)
   }
   if (single && columns === null) throw new DbRequestError('single needs columns')
 
